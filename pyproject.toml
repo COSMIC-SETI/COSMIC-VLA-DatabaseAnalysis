@@ -1,0 +1,27 @@
+[build-system]
+requires = ["setuptools>=61.0", "cython"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "cosmic_database_analysis"
+version = "0.0.1"
+authors = [
+  { name="Ross Donnachie", email="code@radonn.co.za" },
+]
+description = "Python package holding analysis scripts run on the SQL databases for COSMIC at the VLA."
+readme = "README.md"
+requires-python = ">=3.7"
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "License :: OSI Approved :: GNU Lesser General Public License v3 (LGPLv3)",
+    "Operating System :: OS Independent",
+]
+dependencies = [
+  "numpy",
+  "blri @ git+https://github.com/MydonSolutions/BLRI",
+  "cosmic_database @ git+https://github.com/COSMIC-SETI/COSMIC-VLA-Database",
+  "seticore @ git+https://github.com/COSMIC-SETI/seticore#egg=seticore&subdirectory=python"
+]
+
+[project.scripts]
+cosmicdb_tag_sarfi = "cosmic_database_analysis:sarfi.cli_create_all_tables"
