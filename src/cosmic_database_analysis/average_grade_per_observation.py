@@ -4,8 +4,9 @@ import sqlalchemy
 from sqlalchemy import func  # Import func from sqlalchemy
 import numpy as np
 import matplotlib.pyplot as plt
+from datetime import datetime as dt
 
-VLASS_VERSION = '3.1'
+VLASS_VERSION = '3.2'
 
 """
 BASIC REQUIRED STUFF TO GET DATABASE ACCESS
@@ -18,6 +19,9 @@ metadata = sqlalchemy.MetaData()
 
 # Reflect the tables
 metadata.reflect(bind=cosmicdb_engine.engine)
+
+# Define the cutoff date
+cutoff_date = dt.strptime('2023-03-30 00:00:00', '%Y-%m-%d %H:%M:%S')
 
 """
 QUERY TO FIND AVERAGE GRADE OF OBSERVATION BARRING THE GRADE OF THE FIRST SCAN
@@ -34,7 +38,8 @@ first_scan_subquery = (
         observation_id_expr.label('observation_id'),
         func.min(scan_number_expr).label('first_scan_number')
     )
-    .where(entities.CosmicDB_Observation.scan_id.like(f'%VLASS{VLASS_VERSION}%'))
+    .where(entities.CosmicDB_Observation.scan_id.like(f'%VLASS{VLASS_VERSION}%'),
+           entities.CosmicDB_Observation.start > cutoff_date)
     .group_by(observation_id_expr)
     .subquery()
 )
@@ -54,7 +59,8 @@ query = (
         (observation_id_expr == first_scan_subquery.c.observation_id) &
         (scan_number_expr != first_scan_subquery.c.first_scan_number)
     )
-    .where(entities.CosmicDB_Observation.scan_id.like(f'%VLASS{VLASS_VERSION}%'))
+    .where(entities.CosmicDB_Observation.scan_id.like(f'%VLASS{VLASS_VERSION}%'),
+           entities.CosmicDB_Observation.start > cutoff_date)
     .group_by(observation_id_expr)
 )
 
