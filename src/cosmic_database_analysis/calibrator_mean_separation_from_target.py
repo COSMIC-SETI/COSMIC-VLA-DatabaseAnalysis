@@ -6,8 +6,10 @@ from sqlalchemy.orm import sessionmaker
 import json
 import math
 from collections import defaultdict
+from datetime import datetime as dt
+import matplotlib.pyplot as plt
 
-VLASS_VERSION = '3.2'
+VLASS_VERSION = '3.1'
 
 # BASIC REQUIRED STUFF TO GET DATABASE ACCESS
 cosmicdb_engine_url = CosmicDB_Engine._create_url("/home/cosmic/conf/cosmicdb_conf.yaml")
@@ -28,8 +30,12 @@ CosmicObservation = metadata.tables['cosmic_observation']
 CosmicObservationCalibration = metadata.tables['cosmic_observation_calibration']
 CosmicScan = metadata.tables['cosmic_scan']
 
+# Define the cutoff date
+cutoff_date = dt.strptime('2023-03-30 00:00:00', '%Y-%m-%d %H:%M:%S')
+
 # Step 1: Find all observations with 'VLASS3.1' in their scan_id
-observations_query = select(CosmicObservation).where(CosmicObservation.c.scan_id.like(f"VLASS{VLASS_VERSION}%"))
+observations_query = select(CosmicObservation).where(CosmicObservation.c.scan_id.like(f"VLASS{VLASS_VERSION}%"),
+    CosmicObservation.c.start > cutoff_date)
 observations = session.execute(observations_query).fetchall()
 
 # Group observations by their prefix (strip off the last two digits)
@@ -37,6 +43,8 @@ prefix_observations = defaultdict(list)
 for observation in observations:
     prefix = observation.scan_id.rsplit('.', 2)[0]
     prefix_observations[prefix].append(observation)
+
+separation_per_dataset = {}
 
 # Iterate through each prefix and calculate means and separations
 for prefix, observations in prefix_observations.items():
@@ -121,6 +129,28 @@ for prefix, observations in prefix_observations.items():
             separation_error = math.sqrt(std_dev_ra_calibration ** 2 + std_dev_dec_calibration ** 2 + std_dev_ra_non_calibration ** 2 + std_dev_dec_non_calibration ** 2)
             print(f"Separation Error for {prefix}: {separation_error}")
     else:
+        separation = None
+        separation_error = None
         print(f"Cannot calculate separation or separation error for {prefix} due to missing data.")
     print("--------------------------------------------------")
 
+    separation_per_dataset[prefix] = {
+        "separation": separation,
+        "separation_error": separation_error,
+        "mean_ra_calibration": mean_ra_calibration,
+        "mean_dec_calibration": mean_dec_calibration,
+        "mean_ra_non_calibration": mean_ra_non_calibration,
+        "mean_dec_non_calibration": mean_dec_non_calibration
+    }
+
+# Plotting the results
+observation_ids = list(separation_per_dataset.keys())
+separations = [data["separation"] if data["separation"] is not None else -1 for data in separation_per_dataset.values()]
+separation_errors = [data["separation_error"] if data["separation_error"] is not None else 0 for data in separation_per_dataset.values()]
+plt.figure(figsize=(15, 12))
+plt.barh(observation_ids, separations, xerr=separation_errors, color='skyblue', capsize=5)
+plt.xlabel('Separation (degrees)')
+plt.ylabel('Observation ID')
+plt.title(f'Separation between Calibration and Non-Calibration Observations for VLASS{VLASS_VERSION}')
+plt.tight_layout()
+plt.savefig(f'separation_between_calibration_and_non_calibration_observations_{VLASS_VERSION}.png')
