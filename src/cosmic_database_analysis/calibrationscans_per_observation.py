@@ -80,7 +80,6 @@ for observation_id_prefix, count in calibration_counts_per_observation.items():
 
 
 print(vlass_percent_calibrations)
-# Close the session
 
 # Extract the observation IDs and ratios
 observation_ids = list(vlass_percent_calibrations.keys())
