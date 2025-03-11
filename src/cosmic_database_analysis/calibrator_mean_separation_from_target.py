@@ -67,8 +67,13 @@ for prefix, observations in prefix_observations.items():
         if scan_entry:
             metadata = json.loads(scan_entry.metadata_json)
             if metadata is not None:
-                ra_values_calibration.append(metadata['ra_deg'])
-                dec_values_calibration.append(metadata['dec_deg'])
+                if "CALIBRATE_FLUX" not in metadata["intents"]["ScanIntent"] and "CALIBRATE_BANDPASS" not in metadata["intents"]["ScanIntent"]:
+                    print(metadata["intents"]["ScanIntent"])
+                    ra_values_calibration.append(metadata['ra_deg'])
+                    dec_values_calibration.append(metadata['dec_deg'])
+                else:
+                    ra_values_calibration.append(None)
+                    dec_values_calibration.append(None)
             else:
                 ra_values_calibration.append(None)
                 dec_values_calibration.append(None)
@@ -153,4 +158,4 @@ plt.xlabel('Separation (degrees)')
 plt.ylabel('Observation ID')
 plt.title(f'Separation between Calibration and Non-Calibration Observations for VLASS{VLASS_VERSION}')
 plt.tight_layout()
-plt.savefig(f'separation_between_calibration_and_non_calibration_observations_{VLASS_VERSION}.png')
+plt.savefig(f'separation_between_calibration_and_non_calibration_observations_new_{VLASS_VERSION}.png')
