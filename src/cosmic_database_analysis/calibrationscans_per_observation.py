@@ -5,8 +5,9 @@ from cosmic_database.engine import CosmicDB_Engine
 # Import strptime from datetime
 from datetime import datetime as dt
 import matplotlib.pyplot as plt
+import numpy as np
 
-VLASS_VERSION = '3.2'
+VLASS_VERSION = '3.1'
 
 """
 BASIC REQUIRED STUFF TO GET DATABASE ACCESS
@@ -84,6 +85,7 @@ print(vlass_percent_calibrations)
 # Extract the observation IDs and ratios
 observation_ids = list(vlass_percent_calibrations.keys())
 ratios = list(vlass_percent_calibrations.values())
+print(np.mean(ratios))
 
 # Create the plot
 plt.figure(figsize=(15, 12))

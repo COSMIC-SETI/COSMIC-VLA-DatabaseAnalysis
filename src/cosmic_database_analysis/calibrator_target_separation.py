@@ -9,7 +9,7 @@ from datetime import datetime as dt
 from collections import defaultdict
 import matplotlib.pyplot as plt
 
-VLASS_VERSION = '3.2'
+VLASS_VERSION = '3.1'
 
 # BASIC REQUIRED STUFF TO GET DATABASE ACCESS
 cosmicdb_engine_url = CosmicDB_Engine._create_url("/home/cosmic/conf/cosmicdb_conf.yaml")
@@ -107,3 +107,64 @@ plt.ylabel('Calibrator Name')
 plt.title(f'Separation between Calibrator and Following Target for VLASS{VLASS_VERSION}')
 plt.tight_layout()
 plt.savefig(f'separation_by_calibrator_{VLASS_VERSION}.png')
+
+# Print out the list of all calibrator names
+print("List of all calibrator names used:")
+for calibrator in calibrator_names:
+    print(calibrator)
+
+# # Function to get the 'overall_grade' of a calibration observation
+# def get_overall_grade(observation_id):
+#     grade_query = select(CosmicObservationCalibration.c.overall_grade).where(
+#         CosmicObservationCalibration.c.observation_id == observation_id
+#     )
+#     grade_entry = session.execute(grade_query).fetchone()
+#     return grade_entry[0] if grade_entry else None
+
+# # Function to check if 'src' contains the word "Slew"
+# def contains_slew(scan_id):
+#     src, _, _ = get_src_ra_dec(scan_id)
+#     if "Slew" in src:
+#         print(src)
+#         print(src and "Slew" in src)
+#     return src and "Slew" in src
+
+# # Iterate over observations to find scans containing "Slew" in their src and their subsequent calibration
+# slew_calibrations_and_grades = []
+
+# # Iterate over observations to find scans containing "Slew" in their src and their subsequent calibration
+# slew_calibrations_and_grades = []
+
+# # Updated loop to iterate until the next calibration scan is found
+# slew_calibrations_and_grades = []
+
+# for prefix, observations in prefix_observations.items():
+#     for i in range(len(observations) - 1):
+#         current_scan_id = observations[i].scan_id
+
+#         # Check if the current scan's src contains "Slew"
+#         if contains_slew(current_scan_id):
+#             print(f"Found Slew scan: {current_scan_id}")
+
+#             # Look for the next calibration scan
+#             for j in range(i + 1, len(observations)):
+#                 next_scan_id = observations[j].scan_id
+
+#                 next_calibration_query = select(CosmicObservationCalibration).where(
+#                     CosmicObservationCalibration.c.observation_id == observations[j].id
+#                 )
+#                 next_calibration_entries = session.execute(next_calibration_query).fetchall()
+
+#                 if next_calibration_entries:
+#                     overall_grade = get_overall_grade(observations[j].id)
+#                     print(f"Overall grade for {next_scan_id}: {overall_grade}")
+#                     slew_calibrations_and_grades.append((current_scan_id, next_scan_id, overall_grade))
+#                     break  # Stop once the next calibration scan is found
+#             else:
+#                 # If no calibration scan is found after the Slew scan
+#                 print(f"No subsequent calibration scan found for Slew scan: {current_scan_id}")
+
+# # Print the results
+# print("Slew Calibrations and Grades of Following Observations:")
+# for slew_scan, next_calibration, grade in slew_calibrations_and_grades:
+#     print(f"Slew Scan: {slew_scan}, Next Calibration: {next_calibration}, Grade: {grade}")
