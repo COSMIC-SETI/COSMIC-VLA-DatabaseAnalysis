@@ -1,99 +1,55 @@
-import sqlalchemy
-from sqlalchemy.orm import sessionmaker
-from sqlalchemy import select
+from cosmic_database import entities
 from cosmic_database.engine import CosmicDB_Engine
-# Import strptime from datetime
-from datetime import datetime as dt
-import matplotlib.pyplot as plt
-import numpy as np
+import sqlalchemy
 
-VLASS_VERSION = '3.1'
-
-"""
-BASIC REQUIRED STUFF TO GET DATABASE ACCESS
-"""
+# Database setup
 cosmicdb_engine_url = CosmicDB_Engine._create_url("/home/cosmic/conf/cosmicdb_conf.yaml")
 cosmicdb_engine = CosmicDB_Engine(engine_url=cosmicdb_engine_url)
 
-# Create a MetaData instance
-metadata = sqlalchemy.MetaData()
+VLASS_VERSION = '3.2'  # Adjust this if needed
 
-# Reflect the tables
-metadata.reflect(bind=cosmicdb_engine.engine)
+with cosmicdb_engine.session() as session:
+    # Query to get all calibration observations (following original logic)
+    calibration_query = (
+        sqlalchemy.select(
+            entities.CosmicDB_Observation.id,
+            entities.CosmicDB_Observation.scan_id
+        )
+        .join(
+            entities.CosmicDB_ObservationCalibration,
+            entities.CosmicDB_ObservationCalibration.observation_id == entities.CosmicDB_Observation.id
+        )
+        .where(entities.CosmicDB_Observation.scan_id.like(f'%VLASS{VLASS_VERSION}%'))
+    )
 
-# Access tables
-CosmicObservation = metadata.tables['cosmic_observation']
-CosmicObservationCalibration = metadata.tables['cosmic_observation_calibration']
+    calibration_results = session.execute(calibration_query).fetchall()
 
-# Create a session
-Session = sessionmaker(bind=cosmicdb_engine.engine)
-session = Session()
+    # Extract dataset IDs from calibration observations
+    calibration_scan_ids = set(scan_id for _, scan_id in calibration_results)
 
-# Define the cutoff date
-cutoff_date = dt.strptime('2023-03-30 00:00:00', '%Y-%m-%d %H:%M:%S')
+    # Count total calibration observations (adhering to your script's logic)
+    total_calibration_scans = len(calibration_results)
 
-# Query to find all entries in cosmic_observation where scan_id contains "VLASS3.1" and start date is after March 30th, 2023
-vlass_scans_query = select(CosmicObservation.c.id, CosmicObservation.c.scan_id).where(
-    CosmicObservation.c.scan_id.like(f'%VLASS{VLASS_VERSION}%'),
-    CosmicObservation.c.start > cutoff_date
-)
-# Execute the query
-vlass_scans = session.execute(vlass_scans_query).fetchall()
+    # Query to get all observations matching the VLASS version
+    all_scans_query = (
+        sqlalchemy.select(
+            entities.CosmicDB_Observation.scan_id
+        )
+        .where(entities.CosmicDB_Observation.scan_id.like(f'%VLASS{VLASS_VERSION}%'))
+    )
 
-# Dictionary to store the counts of scans per observation group
-scan_counts_per_observation = {}
-calibration_counts_per_observation = {}
+    all_scan_results = session.execute(all_scans_query).fetchall()
 
-# Iterate over the results and group by observation ID prefix
-for scan in vlass_scans:
-    # Extract the observation ID prefix (everything except the last two segments)
-    observation_id_prefix = '.'.join(scan.scan_id.split('.')[:-2])
-    if observation_id_prefix not in scan_counts_per_observation:
-        scan_counts_per_observation[observation_id_prefix] = 0
-    scan_counts_per_observation[observation_id_prefix] += 1
+    # Count total scans
+    total_scans = len(all_scan_results)
 
-    # Check if the id exists in cosmic_observation_calibration
-    calibration_query = select(CosmicObservationCalibration).where(CosmicObservationCalibration.c.observation_id == scan.id)
-    calibration_entry = session.execute(calibration_query).fetchone()
-    
-    # Update the calibration counts dictionary
-    if observation_id_prefix not in calibration_counts_per_observation:
-        calibration_counts_per_observation[observation_id_prefix] = 0
-    if calibration_entry:
-        calibration_counts_per_observation[observation_id_prefix] += 1
+    # Count non-calibration scans
+    total_non_calibration_scans = total_scans - total_calibration_scans
 
-session.close()
+    # Calculate percentage of calibration scans
+    calibration_percentage = (total_calibration_scans / total_scans) * 100 if total_scans > 0 else 0
 
-vlass_percent_calibrations = {}
-# Print the results
-print("Counts of scans per observation group:")
-for observation_id_prefix, count in scan_counts_per_observation.items():
-    print(f"Observation ID Prefix: {observation_id_prefix}, Count: {count}")
-    if observation_id_prefix in calibration_counts_per_observation:
-        print(f"Calibration Count: {calibration_counts_per_observation[observation_id_prefix]}")
-        vlass_percent_calibrations[observation_id_prefix] = calibration_counts_per_observation[observation_id_prefix] / count
-    else:
-        continue
-
-print("\nCounts of calibration scans per observation group:")
-for observation_id_prefix, count in calibration_counts_per_observation.items():
-    print(f"Observation ID Prefix: {observation_id_prefix}, Calibration Count: {count}")
-
-
-print(vlass_percent_calibrations)
-
-# Extract the observation IDs and ratios
-observation_ids = list(vlass_percent_calibrations.keys())
-ratios = list(vlass_percent_calibrations.values())
-print(np.mean(ratios))
-
-# Create the plot
-plt.figure(figsize=(15, 12))
-plt.barh(observation_ids, ratios, color='skyblue')
-plt.xlabel('Ratio of Calibration Observations to Overall Observations')
-plt.ylabel('Observation ID')
-plt.title('Calibration Observations Ratio per Observation ID')
-plt.tight_layout()
-
-# Show the plot
-plt.savefig(f'calibration_percentage_per_obs_{VLASS_VERSION}.png')
+print(f"Total scans: {total_scans}")
+print(f"Total calibration observations: {total_calibration_scans}")
+print(f"Total non-calibration scans: {total_non_calibration_scans}")
+print(f"Percentage of calibration scans: {calibration_percentage:.2f}%")

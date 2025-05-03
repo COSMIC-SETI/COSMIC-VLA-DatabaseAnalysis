@@ -1,92 +1,89 @@
 from cosmic_database import entities
 from cosmic_database.engine import CosmicDB_Engine
 import sqlalchemy
-from sqlalchemy import func  # Import func from sqlalchemy
+from sqlalchemy import func
 import numpy as np
 import matplotlib.pyplot as plt
 from datetime import datetime as dt
 
-VLASS_VERSION = '3.2'
+VLASS_VERSIONS = ['3.1','3.2']  # List of VLASS versions to process
 
-"""
-BASIC REQUIRED STUFF TO GET DATABASE ACCESS
-"""
+# Database setup
 cosmicdb_engine_url = CosmicDB_Engine._create_url("/home/cosmic/conf/cosmicdb_conf.yaml")
 cosmicdb_engine = CosmicDB_Engine(engine_url=cosmicdb_engine_url)
-
-# Create a MetaData instance
 metadata = sqlalchemy.MetaData()
-
-# Reflect the tables
 metadata.reflect(bind=cosmicdb_engine.engine)
-
-# Define the cutoff date
 cutoff_date = dt.strptime('2023-03-30 00:00:00', '%Y-%m-%d %H:%M:%S')
 
-"""
-QUERY TO FIND AVERAGE GRADE OF OBSERVATION BARRING THE GRADE OF THE FIRST SCAN
-"""
-# Extract observation ID from scan_id
-observation_id_expr = func.substr(entities.CosmicDB_Observation.scan_id, 1, func.length(entities.CosmicDB_Observation.scan_id) - 6)
-
-# Extract scan number from scan_id
-scan_number_expr = func.substr(entities.CosmicDB_Observation.scan_id, -5, 3)
-
-# Subquery to find the first scan in each observation with scan_id like '%VLASS3.1%'
-first_scan_subquery = (
-    sqlalchemy.select(
-        observation_id_expr.label('observation_id'),
-        func.min(scan_number_expr).label('first_scan_number')
-    )
-    .where(entities.CosmicDB_Observation.scan_id.like(f'%VLASS{VLASS_VERSION}%'),
-           entities.CosmicDB_Observation.start > cutoff_date)
-    .group_by(observation_id_expr)
-    .subquery()
-)
-
-# Query to calculate the average overall_grade per observation, excluding the first scan
-query = (
-    sqlalchemy.select(
-        observation_id_expr.label('observation_id'),
-        func.avg(entities.CosmicDB_ObservationCalibration.overall_grade).label('average_overall_grade')
-    )
-    .join(
-        entities.CosmicDB_Observation,
-        entities.CosmicDB_ObservationCalibration.observation_id == entities.CosmicDB_Observation.id
-    )
-    .join(
-        first_scan_subquery,
-        (observation_id_expr == first_scan_subquery.c.observation_id) &
-        (scan_number_expr != first_scan_subquery.c.first_scan_number)
-    )
-    .where(entities.CosmicDB_Observation.scan_id.like(f'%VLASS{VLASS_VERSION}%'),
-           entities.CosmicDB_Observation.start > cutoff_date)
-    .group_by(observation_id_expr)
-)
-
-with cosmicdb_engine.session() as session:
-    results = session.execute(query).fetchall()
-
-# Print out the results
-for result in results:
-    observation_id, average_overall_grade = result
-    print(f"Observation ID: {observation_id}, Average Overall Grade: {average_overall_grade}")
-
-len_results=len(results)
-observation_ids = ['']*len_results
-average_grades = [0]*len_results
-
-for i, result in enumerate(results):
-    observation_ids[i]=result[0]
-    average_grades[i]=result[1]
-
-# Define the bin edges
+# Define histogram bin edges
 bins = [i * 0.1 for i in range(11)]
 
-# Plot the histogram
-plt.hist(average_grades, bins=bins, edgecolor='black')
-plt.xlabel('Average Overall Grade')
-plt.ylabel('Number of Observations')
-plt.title(f'Histogram of VLASS{VLASS_VERSION} Observations by Average Overall Grade')
+# Create subplots
+fig, axes = plt.subplots(len(VLASS_VERSIONS), 1, figsize=(6, 4 * len(VLASS_VERSIONS)), sharex=True, tight_layout=True)
 
-plt.savefig(f'average_grade_per_observation_vlass{VLASS_VERSION}.png')
+if len(VLASS_VERSIONS) == 1:
+    axes = [axes]  # Ensure axes is iterable for a single subplot
+
+for idx, VLASS_VERSION in enumerate(VLASS_VERSIONS):
+    with cosmicdb_engine.session() as session:
+        # Query all calibration scans
+        query = (
+            sqlalchemy.select(
+                entities.CosmicDB_Observation.id,
+                entities.CosmicDB_Observation.scan_id,
+                entities.CosmicDB_Observation.start,
+                entities.CosmicDB_ObservationCalibration.overall_grade
+            )
+            .join(
+                entities.CosmicDB_ObservationCalibration,
+                entities.CosmicDB_ObservationCalibration.observation_id == entities.CosmicDB_Observation.id
+            )
+            .where(
+                entities.CosmicDB_Observation.scan_id.like(f'%VLASS{VLASS_VERSION}%'),
+                entities.CosmicDB_Observation.start > cutoff_date
+            )
+        )
+
+        results = session.execute(query).fetchall()
+
+        # Organize scans by dataset
+        dataset_scans = {}
+        dataset_first_scans = {}
+
+        for obs_id, scan_id, start_time, grade in results:
+            dataset_id = '.'.join(scan_id.split('.')[:-2])  # Extract dataset ID
+            scan_number = int(scan_id.split('.')[-2])  # Extract scan number
+
+            if dataset_id not in dataset_scans:
+                dataset_scans[dataset_id] = []
+
+            dataset_scans[dataset_id].append((scan_number, grade))
+        print(len(dataset_scans))
+
+        # Identify first scan in each dataset
+        for dataset_id, scans in dataset_scans.items():
+            first_scan_number = min(scans, key=lambda x: x[0])[0]  # Find the lowest scan number
+            dataset_first_scans[dataset_id] = first_scan_number  # Store first scan number
+
+        # Compute average grade per dataset (excluding first scan)
+        dataset_avg_grades = {}
+        for dataset_id, scans in dataset_scans.items():
+            filtered_grades = [grade for scan_number, grade in scans if scan_number != dataset_first_scans[dataset_id]]
+            
+            if filtered_grades:  # Ensure there's data to compute an average
+                dataset_avg_grades[dataset_id] = np.mean(filtered_grades)
+
+        # Extract grades for plotting
+        average_grades = list(dataset_avg_grades.values())
+
+        # Plot histogram
+        if average_grades:
+            axes[idx].hist(average_grades, bins=bins, edgecolor='black')
+            axes[idx].set_ylabel(f'VLASS {VLASS_VERSION}\nNumber of Datasets')
+            if idx == len(VLASS_VERSIONS) - 1:
+                axes[idx].set_xlabel('Average Calibration Grade (Excluding First Scan)')
+        else:
+            axes[idx].text(0.5, 0.5, 'No Data', ha='center', va='center', fontsize=12, transform=axes[idx].transAxes)
+
+# Save plot
+plt.savefig('average_calibration_grade_excluding_first_scan.png', dpi=300)
